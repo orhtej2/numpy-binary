@@ -27,7 +27,7 @@ index add073376d..696ad2b648 100644
 -  'X86_V2', 1, args: ['-msse', '-msse2', '-msse3', '-mssse3', '-msse4.1', '-msse4.2',
 -                      '-mpopcnt', '-msahf'] + X86_64_V2_FLAGS + HWY_SSE4_FLAGS,
 +  'X86_V2', 1, args: ['-msse', '-msse2'
-+, '-msse3'
++#, '-msse3'
 +#, '-mssse3'
 +#, '-msse4.1', '-msse4.2',
 +#                      '-mpopcnt', '-msahf'
@@ -35,7 +35,7 @@ index add073376d..696ad2b648 100644
    # Adds compiler definitions `NPY_HAVE_SSE*` 
 -  group: ['SSE', 'SSE2', 'SSE3', 'SSSE3', 'SSE41', 'SSE42', 'POPCNT', 'LAHF'] + X86_64_V2_NAMES,
 +  group: ['SSE', 'SSE2'
-+, 'SSE3'
++#, 'SSE3'
 +#, 'SSSE3', 'SSE41', 'SSE42', 'POPCNT', 'LAHF'
 +] + X86_64_V2_NAMES,
    detect: 'X86_V2',

@@ -1,0 +1,102 @@
+name: Build numpy binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      numpy_tag:
+        description: 'NumPy tag to build (e.g. v2.4.6)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            python: "3.11"
+          - os: ubuntu-24.04
+            python: "3.13"
+
+    steps:
+      - name: Checkout numpy-binary
+        uses: actions/checkout@v4
+        with:
+          path: numpy-binary
+
+      - name: Checkout numpy
+        uses: actions/checkout@v4
+        with:
+          repository: numpy/numpy
+          ref: ${{ inputs.numpy_tag }}
+          submodules: true
+          fetch-tags: true
+          path: numpy-src
+
+      - name: Apply build patch
+        working-directory: numpy-src
+        run: git apply ../numpy-binary/build.patch
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang lld
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Create venv
+        working-directory: numpy-src
+        run: |
+          uv venv .venv --python ${{ matrix.python }}
+          echo "${{ github.workspace }}/numpy-src/.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=${{ github.workspace }}/numpy-src/.venv" >> $GITHUB_ENV
+
+      - name: Install build dependencies
+        working-directory: numpy-src
+        run: |
+          uv pip install -r requirements/build_requirements.txt
+          uv pip install scipy_openblas64
+
+      - name: Build numpy
+        working-directory: numpy-src
+        env:
+          CC: clang
+          CXX: clang++
+          CPPFLAGS: '-march=x86-64'
+          LDFLAGS: '-fuse-ld=lld'
+        run: spin build --with-scipy-openblas=64
+
+      - name: Package artifact
+        working-directory: numpy-src
+        run: |
+          TARNAME="numpy-${{ inputs.numpy_tag }}-${{ matrix.os }}-py${{ matrix.python }}.tar.gz"
+          tar -czf "../numpy-binary/${TARNAME}" -C build-install/usr .
+          echo "TARNAME=${TARNAME}" >> $GITHUB_ENV
+
+      - name: Publish to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="${{ inputs.numpy_tag }}"
+          TARPATH="numpy-binary/${{ env.TARNAME }}"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "NumPy ${TAG}" \
+              --notes "Minimal x86-64 binary builds of NumPy ${TAG}" \
+              --target "${{ github.sha }}"
+          fi
+
+          gh release upload "$TAG" "$TARPATH" --clobber
